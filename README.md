@@ -169,6 +169,38 @@ Vantagem: não é preciso criar serviço de banco no Railway. Funciona igual.
 > Em ambos os casos o schema é criado pelo próprio deploy. O que difere é apenas
 > quem provisiona o servidor PostgreSQL.
 
+## "Application failed to respond" durante o login
+
+Essa página é do Railway, não do app: o container morreu ou não respondeu ao
+proxy. Se acontece **ao clicar em "Entrar com GitHub"**, a causa clássica é uma
+rejeição não tratada:
+
+Express 4 não captura rejeições de handlers `async`. Quando `/auth/me` (chamado
+imediatamente após o redirect com `?token=`) recebia um erro do Prisma — banco
+oscilando, Supabase pausado, pool esgotado —, a Promise rejeitava, o Node 22
+encerrava o processo e o Railway mostrava *Application failed to respond*.
+
+Hoje:
+
+- rotas async usam `asyncHandler` (inclusive `/auth/me` e `/auth/github/callback`);
+- `unhandledRejection` e `uncaughtException` são logados em vez de matar o
+  processo silenciosamente;
+- falha de banco responde **503** com mensagem clara
+  (`Banco de dados indisponível no momento`), e pool esgotado (P2024) também;
+- o callback tem `try/catch` e volta para `/login?error=...` em vez de estourar.
+
+Para diagnosticar, veja o log do container em **Railway → Deployments → View
+Logs**. As linhas relevantes são:
+
+```
+[SiNutre] Banco de dados inacessivel: ...
+[SiNutre] Promise rejeitada sem tratamento: ...
+[SiNutre] Erro inesperado no callback do GitHub: ...
+```
+
+Se o container reiniciar sozinho após cada tentativa de login, a causa é uma
+dessas três linhas — o app agora registra em vez de desaparecer.
+
 ## Segurança
 
 - `.env` e variações (`.env.local`, `.env.production`...) **nunca** são

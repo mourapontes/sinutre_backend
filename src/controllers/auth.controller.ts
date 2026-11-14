@@ -82,6 +82,25 @@ function failAuth(
 // 3) cria ou atualiza o User
 // 4) emite um JWT e redireciona ao frontend
 export async function githubCallback(req: Request, res: Response) {
+  try {
+    await handleGithubCallback(req, res);
+  } catch (error) {
+    // Instabilidade do GitHub ou do banco nao pode virar pagina de erro do
+    // Railway: o usuario volta ao login com uma mensagem clara.
+    console.error('[SiNutre] Erro inesperado no callback do GitHub:', error);
+
+    if (!res.headersSent) {
+      failAuth(
+        req,
+        res,
+        503,
+        'Não foi possível concluir o login agora. Tente novamente em instantes.',
+      );
+    }
+  }
+}
+
+async function handleGithubCallback(req: Request, res: Response) {
   // O GitHub devolve ?error=... quando o usuário nega a autorização.
   const githubError = req.query.error as string | undefined;
 
@@ -151,6 +170,20 @@ export async function githubCallback(req: Request, res: Response) {
     name: string | null;
     avatar_url: string | null;
   };
+
+  if (!githubUser || !githubUser.id) {
+    console.error(
+      '[SiNutre] GitHub nao retornou o usuario (HTTP ' +
+        `${userResponse.status}): ${JSON.stringify(githubUser).slice(0, 200)}`,
+    );
+
+    return failAuth(
+      req,
+      res,
+      502,
+      'O GitHub não retornou os dados do usuário. Tente novamente.',
+    );
+  }
 
   const user = await prisma.user.upsert({
     where: { githubId: String(githubUser.id) },

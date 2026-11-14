@@ -2,6 +2,19 @@ import { app } from './app';
 import { env } from './config/env';
 import { verifyGithubOauth, logGithubOauthStatus } from './lib/github-oauth';
 
+// Rede de seguranca: no Node 22 uma Promise rejeitada sem catch encerra o
+// processo. Num handler async do Express 4 (que nao captura rejeicoes) isso
+// derrubava o container com "Application failed to respond" em pleno login,
+// sempre que o banco oscilava. Os handlers usam asyncHandler; isto aqui cobre
+// qualquer caminho que escape.
+process.on('unhandledRejection', (reason) => {
+  console.error('[SiNutre] Promise rejeitada sem tratamento:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[SiNutre] Excecao nao capturada:', error);
+});
+
 // Plataformas de container (Railway, Fly, Render) roteiam para a interface
 // pública do container. Escutar só em loopback faria o proxy receber
 // "application failed to respond" (HTTP 502).

@@ -23,9 +23,30 @@ export function errorHandler(
     });
   }
 
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    // Banco inacessivel (rede, Supabase pausado, credencial). Sem isso o login
+    // aparecia como "Erro interno" generico e sem pista do que aconteceu.
+    console.error('[SiNutre] Banco de dados inacessivel:', error.message);
+
+    return res.status(503).json({
+      error:
+        'Banco de dados indisponível no momento. Tente novamente em instantes.',
+    });
+  }
+
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Registro não encontrado.' });
+    }
+
+    if (error.code === 'P2024') {
+      // Pool esgotado: Supabase com connection_limit=1 aguenta poucas
+      // requisicoes simultaneas.
+      console.error('[SiNutre] Pool de conexoes esgotado:', error.message);
+
+      return res.status(503).json({
+        error: 'Muitas requisições ao banco. Tente novamente em instantes.',
+      });
     }
 
     if (error.code === 'P2002') {
