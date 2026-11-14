@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { env } from './config/env';
+import { prisma } from './prisma';
 import { authRoutes } from './routes/auth.routes';
 import { mealsRoutes } from './routes/meals.routes';
 import { foodRouter } from './routes/food.routes';
@@ -34,6 +35,25 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Diagnostico do banco a partir do container publicado. Retorna apenas o codigo
+// do erro do Prisma (ex.: P1001 = servidor inalcancavel), nunca host ou senha.
+app.get('/health/db', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+
+    return res.json({ status: 'ok' });
+  } catch (error) {
+    const code =
+      (error as { errorCode?: string }).errorCode ??
+      (error as Error).name ??
+      'desconhecido';
+
+    console.error('[SiNutre] Healthcheck do banco falhou:', error);
+
+    return res.status(503).json({ status: 'error', code });
+  }
 });
 
 app.use('/auth', authRoutes);
