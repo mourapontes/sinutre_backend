@@ -40,7 +40,7 @@ npx prisma migrate dev --name nome-da-migracao
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Credenciais do OAuth App |
 | `GITHUB_CALLBACK_URL` | URL de callback (`.../auth/github/callback`) |
 | `JWT_SECRET` | Segredo para assinar os tokens |
-| `FRONTEND_URL` | Origem liberada no CORS e destino do redirect pós-login |
+| `FRONTEND_URL` | Origem liberada no CORS e destino do redirect pós-login. Aceita vários domínios separados por vírgula |
 
 ## Rotas
 
@@ -116,9 +116,43 @@ Limites aplicados:
 
 ## Deploy no Railway
 
-1. Crie um serviço a partir do repositório.
-2. Adicione um banco PostgreSQL (ou use o Supabase) e configure `DATABASE_URL`.
-3. Configure as variáveis da tabela acima, com `GITHUB_CALLBACK_URL` apontando
-   para o domínio do Railway e `FRONTEND_URL` para o domínio da Vercel.
-4. Build: `npm install && npm run build`
-5. Start: `npm start` (executa `prisma migrate deploy` e sobe o servidor)
+O repositório já inclui `railway.json` (build, start e health check em `/health`).
+
+1. **Crie o projeto** em [railway.app](https://railway.app) → *New Project*.
+2. **Adicione o banco**: *Create* → *Database* → **PostgreSQL**.
+   O Railway expõe `DATABASE_URL`; se usar Supabase/Neon, copie a connection
+   string com `?sslmode=require`.
+3. **Adicione o serviço**: *Create* → *GitHub Repo* → `mourapontes/sinutre_backend`.
+4. Em **Variables**, configure:
+
+   | Variável | Valor |
+   | --- | --- |
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (referência) ou a string do provedor |
+   | `JWT_SECRET` | string longa e aleatória |
+   | `GITHUB_CLIENT_ID` | do OAuth App |
+   | `GITHUB_CLIENT_SECRET` | do OAuth App |
+   | `GITHUB_CALLBACK_URL` | `https://<seu-servico>.up.railway.app/auth/github/callback` |
+   | `FRONTEND_URL` | `https://sinutre-fontend-m7kr.vercel.app` |
+   | `TZ` | `America/Sao_Paulo` |
+
+   `PORT` é injetada automaticamente pelo Railway.
+5. Em **Settings → Networking**, clique em *Generate Domain* e copie a URL.
+6. Atualize `GITHUB_CALLBACK_URL` com o domínio gerado e faça o redeploy.
+7. Valide: `https://<seu-servico>.up.railway.app/health` deve responder
+   `{"status":"ok"}`.
+8. No **GitHub OAuth App**, ajuste *Authorization callback URL* para o mesmo
+   valor de `GITHUB_CALLBACK_URL`.
+
+O start roda `prisma migrate deploy` antes de subir o servidor, então as tabelas
+são criadas automaticamente no primeiro deploy.
+
+### Múltiplos domínios no CORS
+
+`FRONTEND_URL` aceita uma lista separada por vírgula, útil para liberar o domínio
+de produção e os previews da Vercel ao mesmo tempo:
+
+```
+FRONTEND_URL=https://sinutre-fontend-m7kr.vercel.app,https://sinutre-fontend-git-main.vercel.app
+```
+
+O primeiro domínio da lista é usado no redirect após o login.

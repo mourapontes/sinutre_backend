@@ -10,7 +10,20 @@ import { errorHandler, notFound } from './middlewares/error.middleware';
 
 export const app = express();
 
-app.use(cors({ origin: env.frontendUrl, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Requisições sem Origin (curl, health check) são permitidas.
+      if (!origin || env.frontendUrls.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`[CORS] Origem bloqueada: ${origin}`);
+      return callback(null, false);
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
