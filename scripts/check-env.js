@@ -124,6 +124,65 @@ if (!process.env.FRONTEND_URL) {
   );
 }
 
+// Formato do client_id de um OAuth App do GitHub. Um valor truncado (ex.:
+// "v23li..." em vez de "Ov23li...") faz a tela de autorizacao do GitHub
+// responder 404 e o login nunca volta para o app.
+const GITHUB_CLIENT_ID_PATTERNS = [
+  /^Ov23li[A-Za-z0-9]{16}$/, // OAuth App criado a partir de 2024
+  /^[0-9a-f]{20}$/, // OAuth App antigo (hex)
+  /^Iv1\.[0-9a-f]{16}$/, // GitHub App
+];
+
+function mask(value) {
+  return value.length <= 8 ? '***' : `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function checkGithubOauth() {
+  const clientId = (process.env.GITHUB_CLIENT_ID ?? '').trim();
+
+  if (clientId && !GITHUB_CLIENT_ID_PATTERNS.some((re) => re.test(clientId))) {
+    console.warn(
+      `\n[SiNutre] GITHUB_CLIENT_ID parece invalido (${mask(clientId)}, ` +
+        `${clientId.length} caracteres).\n` +
+        '      Formatos aceitos: Ov23li + 16 caracteres (OAuth App novo),\n' +
+        '      20 caracteres hexadecimais (OAuth App antigo) ou Iv1. + 16 (GitHub App).\n' +
+        '      Com o valor errado a pagina do GitHub responde 404 e o login nao\n' +
+        '      retorna para o app. Copie o Client ID em\n' +
+        '      GitHub > Settings > Developer settings > OAuth Apps > (seu app).\n' +
+        '      Se o app nao existir mais, crie outro e atualize Client ID,\n' +
+        '      Client Secret e GITHUB_CALLBACK_URL aqui e no GitHub.\n',
+    );
+    return;
+  }
+
+  if (clientId) {
+    console.log(`[SiNutre] GitHub client_id: ${mask(clientId)}`);
+  }
+
+  const callbackUrl = (process.env.GITHUB_CALLBACK_URL ?? '').trim();
+  const deployed = Boolean(
+    process.env.RAILWAY_ENVIRONMENT_NAME ?? process.env.RAILWAY_ENVIRONMENT,
+  );
+
+  if (callbackUrl && !/\/auth\/github\/callback$/.test(callbackUrl)) {
+    console.warn(
+      `[SiNutre] GITHUB_CALLBACK_URL deveria terminar em /auth/github/callback: ${callbackUrl}`,
+    );
+  }
+
+  if (deployed && /localhost|127\.0\.0\.1/.test(callbackUrl)) {
+    console.warn(
+      '[SiNutre] GITHUB_CALLBACK_URL aponta para localhost, mas o servidor esta\n' +
+        '      publicado. O GitHub so aceita a URL cadastrada no OAuth App; use o\n' +
+        '      dominio publico do backend.',
+    );
+  }
+
+  console.log(`[SiNutre] GitHub callback: ${callbackUrl || '(vazio)'}`);
+}
+
+checkGithubOauth();
+
 console.log('[SiNutre] Variaveis de ambiente validadas.');
 
 const context = describeContext();

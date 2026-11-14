@@ -268,3 +268,48 @@ em `src/config/env.ts`. Sem isso a API respondia **403** para o site em produç�
 quando `FRONTEND_URL` estava ausente ou apontando para outro domínio. Em ambiente
 publicado, se `FRONTEND_URL` só tiver domínios locais (`localhost`), o redirect
 após o login usa `https://sinutre-fontend-m7kr.vercel.app`.
+
+## Login pelo GitHub retorna 404
+
+Se ao clicar em *Entrar com GitHub* o navegador abre
+`https://github.com/login/oauth/authorize?client_id=...` e o GitHub mostra uma
+página **404**, o problema é o OAuth App no GitHub — não o código. O GitHub só
+responde 404 (em vez de redirecionar de volta) quando o `client_id` não existe:
+valor digitado/colado errado, ou o OAuth App foi apagado/recriado.
+
+O `npm start` imprime o client_id mascarado no boot para conferir:
+
+```
+[SiNutre] GitHub client_id: Ov23li...MNOP
+[SiNutre] GitHub callback: https://sinutrebackend-production.up.railway.app/auth/github/callback
+```
+
+Se aparecer `GITHUB_CLIENT_ID parece invalido (...)`, o valor está truncado. Os
+formatos válidos são `Ov23li` + 16 caracteres (OAuth App criado a partir de
+2024), 20 caracteres hexadecimais (OAuth App antigo) ou `Iv1.` + 16 (GitHub App).
+
+Para corrigir:
+
+1. **GitHub → Settings → Developer settings → OAuth Apps** (ou, se o app estiver
+   em uma organização: **Organization settings → Developer settings**). Se o app
+   não estiver na lista, clique em **New OAuth App**.
+2. *Authorization callback URL*:
+   `https://sinutrebackend-production.up.railway.app/auth/github/callback`
+   (precisa ser exatamente igual a `GITHUB_CALLBACK_URL`).
+3. Copie **Client ID** e **Client secret** (o secret só aparece uma vez; use
+   *Generate a new client secret* se tiver perdido).
+4. No **Railway → serviço → Variables**, atualize `GITHUB_CLIENT_ID`,
+   `GITHUB_CLIENT_SECRET` e `GITHUB_CALLBACK_URL` e faça o redeploy
+   (*Deployments → ⋯ → Redeploy*).
+5. Confira no log do boot o client_id mascarado e teste
+   `https://sinutrebackend-production.up.railway.app/auth/github`: o `Location`
+   deve apontar para `github.com/login/oauth/authorize` com o mesmo `client_id`.
+
+Outros sintomas com causa parecida:
+
+| O que aparece | Causa |
+| --- | --- |
+| 404 na página do GitHub | `client_id` inválido (formato errado ou OAuth App apagado) |
+| `redirect_uri_mismatch` | `GITHUB_CALLBACK_URL` diferente da *Authorization callback URL* do app |
+| Volta para `/login` sem token | `FRONTEND_URL` com domínio que não é o do front (CORS/redirect) |
+| `Falha ao obter access_token do GitHub` | `GITHUB_CLIENT_SECRET` errado |
