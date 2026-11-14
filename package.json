@@ -9,6 +9,7 @@
     "build": "prisma generate && tsc",
     "start": "node scripts/start.js",
     "check:env": "node scripts/check-env.js",
+    "test:db": "node scripts/test-db.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

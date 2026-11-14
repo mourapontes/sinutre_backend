@@ -228,6 +228,19 @@ sinal de que elas estão no lugar errado. Para rodar só a checagem:
 npm run check:env
 ```
 
+### Testar a conexão do banco
+
+Antes de subir para o Railway, valide a connection string localmente:
+
+```bash
+# preencha DATABASE_URL (e DIRECT_URL, se Supabase) no .env
+npm run test:db
+```
+
+O script valida o formato da URL (placeholder de senha, `db.<ref>.supabase.co`
+IPv6, `pgbouncer=true` ausente) e tenta conectar, mostrando o banco, a lista de
+tabelas e a causa provável de cada erro (`P1001`, `P1000`, DNS etc.).
+
 ### Múltiplos domínios no CORS
 
 `FRONTEND_URL` aceita uma lista separada por vírgula, útil para liberar o domínio
