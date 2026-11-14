@@ -17,25 +17,24 @@ const mask = (url) => {
   return url.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:****@');
 };
 
-const PLACEHOLDERS = [
-  'PROJECT_REF',
-  'REGIAO',
-  'SENHA',
-  'SUA_SENHA',
-  '[YOUR-PASSWORD]',
-  'YOUR-PASSWORD',
-  'SEU_',
-  'TROCAR',
-  'COLE_',
-  'COLE_AQUI',
-  'USER:PASSWORD',
-  'HOST:5432',
-  'usuario:senha',
+const PLACEHOLDER_PATTERNS = [
+  /\bPROJECT_REF\b/i,
+  /\bREGIAO\b/i,
+  /\bSUA_SENHA\b/i,
+  /\bSENHA\b/i,
+  /\[YOUR-PASSWORD\]/i,
+  /\bYOUR-PASSWORD\b/i,
+  /\bSEU_[A-Z_]+\b/i,
+  /\bTROCAR\b/i,
+  /\bCOLE(_AQUI)?\b/i,
+  /\bUSER:PASSWORD\b/i,
+  /\bHOST:5432\b/i,
+  /\busuario:senha\b/i,
 ];
 
 function findPlaceholders(url) {
-  return PLACEHOLDERS.filter((token) =>
-    url.toLowerCase().includes(token.toLowerCase()),
+  return PLACEHOLDER_PATTERNS.filter((pattern) => pattern.test(url)).map(
+    (pattern) => pattern.source.replace(/\\b|\[|\]|\//g, ''),
   );
 }
 
@@ -196,10 +195,43 @@ function analyze(url, label) {
     }
     console.error('');
 
-    if (message.includes('P1001')) {
+    const isUnreachable =
+      error?.code === 'P1001' ||
+      message.includes('P1001') ||
+      /can't reach database server|can not reach database server/i.test(message);
+
+    if (isUnreachable) {
       console.error('  P1001 = servidor inalcancavel. Causas comuns:');
       console.error('    - host errado ou db.<ref>.supabase.co (IPv6 no Railway)');
       console.error('    - projeto do Supabase pausado');
+
+      const poolerHost = target.match(
+        /@(aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com):(\d+)/,
+      );
+
+      if (poolerHost) {
+        const [, host, port] = poolerHost;
+        const cluster = host.match(/^(aws-\d+)-/)?.[1] ?? '';
+        const rest = host.replace(/^aws-\d+-/, '');
+        const others = ['aws-0', 'aws-1']
+          .filter((candidate) => candidate !== cluster)
+          .map((candidate) => `${candidate}-${rest}`);
+
+        console.error(
+          '\n  Host de pooler detectado. O Prisma reporta "tenant not found"' +
+            '\n  como P1001, e cada projeto Supabase vive em um cluster' +
+            `\n  (aws-0, aws-1...). Este projeto pode estar em outro:`,
+        );
+
+        for (const other of others) {
+          console.error(`    ${other}:${port}`);
+        }
+
+        console.error(
+          '\n  Confirme o host exato em Supabase > Connect > Connection string' +
+            '\n  (ou Project Settings > Database).\n',
+        );
+      }
     } else if (message.includes('P1000')) {
       console.error('  P1000 = autenticacao falhou. Revise usuario e senha.');
       console.error('    - a senha foi substituida no lugar de [YOUR-PASSWORD]?');
@@ -208,6 +240,38 @@ function analyze(url, label) {
       console.error('  O banco/role informado nao existe.');
     } else if (message.includes('ENOTFOUND') || message.includes('getaddrinfo')) {
       console.error('  DNS nao resolveu o host. Confira o dominio na URL.');
+    }
+
+    // O pooler do Supabase separa os tenants por cluster (aws-0, aws-1...).
+    // Um projeto pode estar no aws-1 mesmo que a documentacao mostre aws-0.
+    const tenantMissing = /tenant\/user .* not found/i.test(message);
+    const poolerMatch = target.match(
+      /@(aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com):(\d+)/,
+    );
+
+    if (tenantMissing && poolerMatch) {
+      const [, currentHost, port] = poolerMatch;
+      const cluster = currentHost.match(/^(aws-\d+)-/)?.[1];
+      const rest = currentHost.replace(/^aws-\d+-/, '');
+
+      console.error('\n=== Cluster do pooler errado ===');
+      console.error(
+        `  O tenant existe, mas nao neste cluster (${cluster}). ` +
+          'Tente o outro:',
+      );
+
+      const alternatives = ['aws-0', 'aws-1']
+        .filter((candidate) => candidate !== cluster)
+        .map((candidate) => `${candidate}-${rest}`);
+
+      for (const alt of alternatives) {
+        console.error(`    ${alt}:${port}`);
+      }
+
+      console.error(
+        '\n  Substitua o host na URL e rode novamente.\n' +
+          '  (o host correto aparece em Supabase > Connect > Connection string)',
+      );
     }
 
     process.exitCode = 1;

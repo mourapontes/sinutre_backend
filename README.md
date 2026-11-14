@@ -168,6 +168,16 @@ Vantagem: não é preciso criar serviço de banco no Railway. Funciona igual.
 > Em ambos os casos o schema é criado pelo próprio deploy. O que difere é apenas
 > quem provisiona o servidor PostgreSQL.
 
+## Segurança
+
+- `.env` e variações (`.env.local`, `.env.production`...) **nunca** são
+  versionados; apenas `.env.example`, com valores de modelo.
+- Certificados e chaves (`*.pem`, `*.key`, `*.p12`, `*.pfx`) também são ignorados.
+- Em produção, todas as credenciais ficam nas *Variables* do Railway — nenhuma
+  senha ou segredo no código ou no histórico do Git.
+- Antes de commitar, confira com `git status --short` e
+  `git check-ignore -v .env`.
+
 ## Deploy no Railway
 
 O repositório já inclui `railway.json` (build, start e health check em `/health`).
@@ -192,14 +202,14 @@ O repositório já inclui `railway.json` (build, start e health check em `/healt
    > Supabase diretamente.
    | `GITHUB_CLIENT_ID` | do OAuth App |
    | `GITHUB_CLIENT_SECRET` | do OAuth App |
-   | `GITHUB_CALLBACK_URL` | `https://<seu-servico>.up.railway.app/auth/github/callback` |
+   | `GITHUB_CALLBACK_URL` | `https://sinutrebackend-production.up.railway.app/auth/github/callback` |
    | `FRONTEND_URL` | `https://sinutre-fontend-m7kr.vercel.app` |
    | `TZ` | `America/Sao_Paulo` |
 
    `PORT` é injetada automaticamente pelo Railway.
 5. Em **Settings → Networking**, clique em *Generate Domain* e copie a URL.
 6. Atualize `GITHUB_CALLBACK_URL` com o domínio gerado e faça o redeploy.
-7. Valide: `https://<seu-servico>.up.railway.app/health` deve responder
+7. Valide: `https://sinutrebackend-production.up.railway.app/health` deve responder
    `{"status":"ok"}`.
 8. No **GitHub OAuth App**, ajuste *Authorization callback URL* para o mesmo
    valor de `GITHUB_CALLBACK_URL`.

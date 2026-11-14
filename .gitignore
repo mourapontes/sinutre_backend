@@ -1,12 +1,34 @@
+# Dependencias
 node_modules/
-dist/
-.env
-.env.local
-.env.*.local
-*.log
-.DS_Store
-package-lock.json
 
-# SQLite local
+# Build
+dist/
+
+# Segredos - NUNCA commitar (o .env.example e o modelo publico)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets.json
+
+# Logs
+*.log
+npm-debug.log*
+.DS_Store
+
+# Banco local (SQLite)
 *.db
 *.db-journal
+prisma/*.db
+prisma/*.db-journal
+
+# Plataformas
+.railway/
+.vercel/
+
+# Lockfile mantido fora do repositorio (ver README)
+package-lock.json
