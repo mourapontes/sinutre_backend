@@ -79,8 +79,8 @@ function mask(value) {
         '      2. Se o app nao estiver na lista, clique em New OAuth App.\n' +
         '      3. Authorization callback URL:\n' +
         `         ${(process.env.GITHUB_CALLBACK_URL ?? '').trim() || 'https://<backend>/auth/github/callback'}\n` +
-        '      4. Copie o Client ID COMPLETO (22 caracteres comecando com Ov23li\n' +
-        '         em apps criados a partir de 2024) e gere/copie o Client secret.\n' +
+        '      4. Copie o Client ID COMPLETO (apps novos comecam com Ov23li) e\n' +
+        '         gere/copie o Client secret (40 caracteres).\n' +
         '      5. Atualize GITHUB_CLIENT_ID e GITHUB_CLIENT_SECRET no host e\n' +
         '         faca o redeploy. Rode este script de novo para confirmar.\n',
     );
@@ -91,7 +91,8 @@ function mask(value) {
     console.log(
       `\n[SiNutre] OK: OAuth App existe para ${mask(clientId)}.\n` +
         '      Se o login ainda falhar, o proximo suspeito e o client secret\n' +
-        '      (erro "Falha ao obter access_token") ou o redirect_uri\n' +
+        '      (erro "Falha ao obter access_token" /\n' +
+        '      incorrect_client_credentials) ou o redirect_uri\n' +
         '      (erro redirect_uri_mismatch na tela do GitHub).\n',
     );
     return;
@@ -100,7 +101,9 @@ function mask(value) {
   if (result.body && result.body.error === 'device_flow_disabled') {
     console.log(
       `\n[SiNutre] OK: OAuth App existe para ${mask(clientId)} ` +
-        '(device flow desabilitado, o que e normal).\n',
+        '(device flow desabilitado, o que e normal).\n' +
+        '      Se o login falhar, o suspeito e o GITHUB_CLIENT_SECRET\n' +
+        '      (incorrect_client_credentials) ou o redirect_uri.\n',
     );
     return;
   }

@@ -124,14 +124,14 @@ if (!process.env.FRONTEND_URL) {
   );
 }
 
-// Formato do client_id de um OAuth App do GitHub. Um valor truncado nao existe
-// no GitHub e a tela de autorizacao responde 404, sem voltar para o app.
-// Esta checagem e offline (heuristica); a definitiva e `npm run check:github`.
+// Formato do client_id de um OAuth App do GitHub. O tamanho depois do prefixo
+// varia, então só rejeitamos valores claramente incompletos. A checagem
+// definitiva é `npm run check:github` (consulta o GitHub).
 const GITHUB_CLIENT_ID_PATTERNS = [
-  /^Ov23li[A-Za-z0-9]{16}$/, // OAuth App criado a partir de 2024
+  /^Ov23li[A-Za-z0-9]{8,24}$/, // OAuth App
+  /^Iv23li[A-Za-z0-9]{8,24}$/, // GitHub App
   /^[0-9a-f]{20}$/, // OAuth App antigo (hex)
-  /^Iv1\.[0-9a-f]{16}$/, // GitHub App
-  /^Iv23li[A-Za-z0-9]{16}$/, // GitHub App criado a partir de 2024
+  /^Iv1\.[0-9a-f]{16}$/, // GitHub App antigo
 ];
 
 function mask(value) {
@@ -140,21 +140,20 @@ function mask(value) {
 
 function checkGithubOauth() {
   const clientId = (process.env.GITHUB_CLIENT_ID ?? '').trim();
+  const clientIdLooksValid =
+    !clientId || GITHUB_CLIENT_ID_PATTERNS.some((re) => re.test(clientId));
 
-  if (clientId && !GITHUB_CLIENT_ID_PATTERNS.some((re) => re.test(clientId))) {
+  if (!clientIdLooksValid) {
     console.warn(
       `\n[SiNutre] GITHUB_CLIENT_ID parece invalido (${mask(clientId)}, ` +
         `${clientId.length} caracteres).\n` +
-        '      Formatos aceitos: Ov23li + 16 caracteres (OAuth App novo),\n' +
-        '      20 caracteres hexadecimais (OAuth App antigo) ou Iv1./Iv23li + 16\n' +
-        '      (GitHub App). Um valor mais curto indica copia truncada e o login\n' +
-        '      falha com 404 na tela do GitHub.\n' +
+        '      Formatos aceitos: Ov23li ou Iv23li seguidos de letras/numeros,\n' +
+        '      20 caracteres hexadecimais (OAuth App antigo) ou Iv1. + 16 hex\n' +
+        '      (GitHub App antigo). Um valor muito curto indica copia truncada e\n' +
+        '      o login falha com 404 na tela do GitHub.\n' +
         '      Confirme com: npm run check:github\n',
     );
-    return;
-  }
-
-  if (clientId) {
+  } else if (clientId) {
     console.log(`[SiNutre] GitHub client_id: ${mask(clientId)}`);
   }
 
@@ -178,6 +177,56 @@ function checkGithubOauth() {
   }
 
   console.log(`[SiNutre] GitHub callback: ${callbackUrl || '(vazio)'}`);
+
+  checkGithubClientSecret();
+}
+
+/**
+ * Client secret de OAuth App do GitHub tem 40 caracteres hexadecimais. A falha
+ * `incorrect_client_credentials` na troca do code acontece quando o secret e o
+ * client_id sao de apps diferentes, o secret esta truncado ou tem aspas.
+ */
+function checkGithubClientSecret() {
+  const raw = process.env.GITHUB_CLIENT_SECRET ?? '';
+  const secret = raw.trim();
+
+  if (!secret) {
+    return;
+  }
+
+  if (/^["']|["']$/.test(secret)) {
+    console.warn(
+      '[SiNutre] GITHUB_CLIENT_SECRET esta entre aspas. Remova as aspas no\n' +
+        '      painel (o servidor ja ignora aspas, mas outros valores do mesmo\n' +
+        '      bloco podem ter sido salvos com elas).',
+    );
+  }
+
+  const clean = secret.replace(/^["']+|["']+$/g, '').trim();
+
+  if (/^gh[pousr]_/.test(clean)) {
+    console.warn(
+      '\n[SiNutre] GITHUB_CLIENT_SECRET parece um Personal Access Token\n' +
+        '      (ghp_/gho_/ghu_...), nao o Client secret do OAuth App.\n' +
+        '      O login falha com "Falha ao obter access_token do GitHub"\n' +
+        '      (incorrect_client_credentials).\n' +
+        '      Copie o secret em: GitHub > Settings > Developer settings >\n' +
+        '      OAuth Apps > seu app > Client secrets > Generate a new client secret.\n',
+    );
+    return;
+  }
+
+  if (!/^[0-9a-f]{40}$/i.test(clean)) {
+    console.warn(
+      `\n[SiNutre] GITHUB_CLIENT_SECRET tem formato inesperado ` +
+        `(${clean.length} caracteres; o esperado sao 40 hexadecimais).\n` +
+        '      Se o Client ID foi trocado (ex.: app recriado), o secret antigo nao\n' +
+        '      funciona mais: gere um novo no OAuth App e atualize a variavel.\n',
+    );
+    return;
+  }
+
+  console.log(`[SiNutre] GitHub client_secret: ${mask(clean)}`);
 }
 
 checkGithubOauth();

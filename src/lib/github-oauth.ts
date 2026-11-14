@@ -41,7 +41,18 @@ export async function verifyGithubOauth(
       signal: AbortSignal.timeout(timeoutMs),
     });
 
-    if (res.status === 404) {
+    // O corpo importa mais que o status: um app válido com device flow
+    // desligado responde HTTP 400 com `device_flow_disabled`.
+    const body = (await res.json().catch(() => null)) as {
+      device_code?: string;
+      error?: string;
+    } | null;
+
+    if (body?.device_code || body?.error === 'device_flow_disabled') {
+      return { status: 'ok' };
+    }
+
+    if (body?.error === 'Not Found' || res.status === 404) {
       return { status: 'invalid-client-id' };
     }
 
@@ -49,19 +60,7 @@ export async function verifyGithubOauth(
       return { status: 'unknown', detail: `${res.status} ${res.statusText}` };
     }
 
-    // App existente responde com `device_code` (device flow ligado) ou com
-    // `device_flow_disabled`. Ambos provam que o client_id é válido.
-    const body = (await res.json()) as { device_code?: string; error?: string };
-
-    if (body.device_code || body.error === 'device_flow_disabled') {
-      return { status: 'ok' };
-    }
-
-    if (body.error === 'Not Found') {
-      return { status: 'invalid-client-id' };
-    }
-
-    return { status: 'unknown', detail: body.error ?? 'resposta inesperada' };
+    return { status: 'unknown', detail: body?.error ?? 'resposta inesperada' };
   } catch (error) {
     return { status: 'unknown', detail: (error as Error).message };
   }

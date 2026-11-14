@@ -1,25 +1,32 @@
 import 'dotenv/config';
 
-function required(name: string): string {
-  const value = process.env[name];
+/**
+ * Remove espaços e aspas envolventes. Colar `"valor"` no painel da hospedagem
+ * mantém as aspas, e um secret com aspas faz o GitHub responder
+ * `incorrect_client_credentials` mesmo com o valor correto dentro.
+ */
+function unwrap(value: string): string {
+  return value
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .trim();
+}
 
-  if (!value || value.trim() === '') {
+function required(name: string): string {
+  const value = unwrap(process.env[name] ?? '');
+
+  if (value === '') {
     throw new Error(`Variável de ambiente obrigatória ausente: ${name}`);
   }
 
-  return value.trim();
+  return value;
 }
 
 /**
- * Normaliza um domínio: remove espaços e aspas (colar `"https://..."` no painel
- * da hospedagem mantém as aspas no valor) e barras no final.
+ * Normaliza um domínio: remove espaços e aspas, e barras no final.
  */
 function normalizeOrigin(value: string): string {
-  return value
-    .trim()
-    .replace(/^["']|["']$/g, '')
-    .trim()
-    .replace(/\/+$/, '');
+  return unwrap(value).replace(/\/+$/, '');
 }
 
 // FRONTEND_URL aceita uma lista separada por vírgula, útil para liberar

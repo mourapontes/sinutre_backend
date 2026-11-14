@@ -314,11 +314,11 @@ também quando o secret está errado, gerando falso positivo.
 2. *Authorization callback URL*:
    `https://sinutrebackend-production.up.railway.app/auth/github/callback`
    (idêntico a `GITHUB_CALLBACK_URL`).
-3. Copie o **Client ID** completo — OAuth Apps criados a partir de 2024 têm 22
-   caracteres e começam com `Ov23li`. Um Client ID válido nunca tem 19
-   caracteres.
-4. Copie o **Client secret** (só aparece uma vez; use *Generate a new client
-   secret* se perdeu).
+3. Copie o **Client ID** completo — apps criados recentemente começam com
+   `Ov23li`; o valor depois do prefixo varia. Um Client ID truncado (faltando
+   caracteres) é a causa do 404.
+4. Copie o **Client secret** (40 caracteres hexadecimais; só aparece uma vez —
+   use *Generate a new client secret* se perdeu).
 5. No host (**Railway → serviço → Variables**), atualize `GITHUB_CLIENT_ID`,
    `GITHUB_CLIENT_SECRET` e `GITHUB_CALLBACK_URL`, depois
    **Deployments → ⋯ → Redeploy**.
@@ -331,7 +331,39 @@ também quando o secret está errado, gerando falso positivo.
 | O que aparece | Causa |
 | --- | --- |
 | 404 na página do GitHub | `client_id` não existe (valor truncado ou OAuth App apagado) |
+| `incorrect_client_credentials` | `GITHUB_CLIENT_SECRET` não é o secret desse `client_id` (app recriado, secret regenerado ou valor copiado com espaços/aspas) |
+| `bad_verification_code` | `code` expirado/usado (a página de callback foi recarregada) |
 | `redirect_uri_mismatch` | `GITHUB_CALLBACK_URL` diferente da *Authorization callback URL* do app |
+| `access_denied` | o usuário cancelou a autorização no GitHub |
 | Volta para `/login` sem token | `FRONTEND_URL` com domínio que não é o do front (CORS/redirect) |
-| `Falha ao obter access_token do GitHub` | `GITHUB_CLIENT_SECRET` errado |
 | `Origin ... nao permitida` | domínio do front fora da allowlist de CORS |
+
+## Falha ao obter access_token (secret inválido)
+
+Depois que o `client_id` está correto, o próximo erro comum é a troca do `code`
+por token falhar. O GitHub responde **HTTP 200** com `{"error": ...}`, então o
+servidor agora registra o código exato e mostra a mensagem na tela de login:
+
+```
+[SiNutre] Falha na troca de code por access_token:
+      incorrect_client_credentials - The client_id and/or client_secret passed are incorrect.
+      [client_id Ov23li...vfee]
+```
+
+`incorrect_client_credentials` significa que o **Client secret não pertence a
+esse Client ID** — típico de app recriado (o secret antigo fica órfão), de
+secret regenerado, ou de valor salvo com espaços/aspas no painel.
+
+Para corrigir:
+
+1. No OAuth App, clique em **Client secrets → Generate a new client secret**.
+2. Copie o valor **sem espaços e sem aspas**.
+3. Atualize `GITHUB_CLIENT_SECRET` no host e faça o redeploy.
+4. Rode `npm run check:env` — ele avisa se o secret não tem 40 caracteres
+   hexadecimais, se está entre aspas ou se é um Personal Access Token (`ghp_...`)
+   colado por engano.
+5. Teste o login de novo: o `code` só vale uma vez e expira em minutos, então não
+   recarregue a página de callback.
+
+`npm run check:github` valida apenas o Client ID (existe ou não); o secret só
+pode ser validado durante a troca do code, com um login real.
