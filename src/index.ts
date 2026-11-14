@@ -1,5 +1,6 @@
 import { app } from './app';
 import { env } from './config/env';
+import { verifyGithubOauth, logGithubOauthStatus } from './lib/github-oauth';
 
 // Plataformas de container (Railway, Fly, Render) roteiam para a interface
 // pública do container. Escutar só em loopback faria o proxy receber
@@ -14,6 +15,13 @@ const server = app.listen(env.port, HOST, () => {
     })`,
   );
   console.log(`[SiNutre] CORS liberado para: ${env.frontendUrls.join(', ')}`);
+  console.log(
+    `[SiNutre] GitHub authorize: /auth/github (callback ${env.github.callbackUrl})`,
+  );
+
+  // Falha de OAuth App nao impede a API de subir, mas deixa o login impossivel.
+  // Roda depois do listen para nao atrasar o healthcheck do Railway.
+  void verifyGithubOauth().then(logGithubOauthStatus);
 });
 
 server.on('error', (error: NodeJS.ErrnoException) => {

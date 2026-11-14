@@ -124,13 +124,14 @@ if (!process.env.FRONTEND_URL) {
   );
 }
 
-// Formato do client_id de um OAuth App do GitHub. Um valor truncado (ex.:
-// "v23li..." em vez de "Ov23li...") faz a tela de autorizacao do GitHub
-// responder 404 e o login nunca volta para o app.
+// Formato do client_id de um OAuth App do GitHub. Um valor truncado nao existe
+// no GitHub e a tela de autorizacao responde 404, sem voltar para o app.
+// Esta checagem e offline (heuristica); a definitiva e `npm run check:github`.
 const GITHUB_CLIENT_ID_PATTERNS = [
   /^Ov23li[A-Za-z0-9]{16}$/, // OAuth App criado a partir de 2024
   /^[0-9a-f]{20}$/, // OAuth App antigo (hex)
   /^Iv1\.[0-9a-f]{16}$/, // GitHub App
+  /^Iv23li[A-Za-z0-9]{16}$/, // GitHub App criado a partir de 2024
 ];
 
 function mask(value) {
@@ -145,12 +146,10 @@ function checkGithubOauth() {
       `\n[SiNutre] GITHUB_CLIENT_ID parece invalido (${mask(clientId)}, ` +
         `${clientId.length} caracteres).\n` +
         '      Formatos aceitos: Ov23li + 16 caracteres (OAuth App novo),\n' +
-        '      20 caracteres hexadecimais (OAuth App antigo) ou Iv1. + 16 (GitHub App).\n' +
-        '      Com o valor errado a pagina do GitHub responde 404 e o login nao\n' +
-        '      retorna para o app. Copie o Client ID em\n' +
-        '      GitHub > Settings > Developer settings > OAuth Apps > (seu app).\n' +
-        '      Se o app nao existir mais, crie outro e atualize Client ID,\n' +
-        '      Client Secret e GITHUB_CALLBACK_URL aqui e no GitHub.\n',
+        '      20 caracteres hexadecimais (OAuth App antigo) ou Iv1./Iv23li + 16\n' +
+        '      (GitHub App). Um valor mais curto indica copia truncada e o login\n' +
+        '      falha com 404 na tela do GitHub.\n' +
+        '      Confirme com: npm run check:github\n',
     );
     return;
   }

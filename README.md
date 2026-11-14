@@ -20,6 +20,7 @@ Stack: **TypeScript + Express + Prisma + PostgreSQL**.
 npm install
 cp .env.example .env          # preencha DATABASE_URL, JWT_SECRET e o OAuth do GitHub
 npm run check:env             # valida se todas as variáveis obrigatórias existem
+npm run check:github          # confirma que o OAuth App do GitHub existe
 npx prisma migrate dev        # cria as tabelas no banco
 npm run dev
 ```
@@ -271,45 +272,66 @@ após o login usa `https://sinutre-fontend-m7kr.vercel.app`.
 
 ## Login pelo GitHub retorna 404
 
-Se ao clicar em *Entrar com GitHub* o navegador abre
-`https://github.com/login/oauth/authorize?client_id=...` e o GitHub mostra uma
-página **404**, o problema é o OAuth App no GitHub — não o código. O GitHub só
-responde 404 (em vez de redirecionar de volta) quando o `client_id` não existe:
-valor digitado/colado errado, ou o OAuth App foi apagado/recriado.
+Se ao clicar em *Entrar com GitHub* o GitHub mostra uma página **404**, o
+`GITHUB_CLIENT_ID` não existe como OAuth App. O GitHub redireciona para o login
+mesmo com client_id inválido (`/login/oauth/authorize` → `/login?client_id=...`);
+o 404 aparece **depois** do login e, como não há redirect de volta, o app nunca
+recebe o token — é exatamente o "não retorna logado".
 
-O `npm start` imprime o client_id mascarado no boot para conferir:
+Rode o diagnóstico (usa um client_id real como grupo de controle, então também
+detecta problema de rede):
+
+```bash
+npm run check:github
+```
+
+Saída quando o app não existe:
 
 ```
-[SiNutre] GitHub client_id: Ov23li...MNOP
-[SiNutre] GitHub callback: https://sinutrebackend-production.up.railway.app/auth/github/callback
+[SiNutre] client_id configurado: v23liAbC1234567890ab (19 caracteres)
+[SiNutre] OAuth App NAO encontrado para v23liA...90ab.
 ```
 
-Se aparecer `GITHUB_CLIENT_ID parece invalido (...)`, o valor está truncado. Os
-formatos válidos são `Ov23li` + 16 caracteres (OAuth App criado a partir de
-2024), 20 caracteres hexadecimais (OAuth App antigo) ou `Iv1.` + 16 (GitHub App).
+Em produção o mesmo teste roda no boot e aparece no log do container:
 
-Para corrigir:
+```
+[SiNutre] GitHub OAuth App OK (client_id Ov23li...MNOP, 22 caracteres)
+```
 
-1. **GitHub → Settings → Developer settings → OAuth Apps** (ou, se o app estiver
-   em uma organização: **Organization settings → Developer settings**). Se o app
-   não estiver na lista, clique em **New OAuth App**.
+### Por que a verificação usa device flow
+
+`POST https://github.com/login/device/code` é público (não exige o client
+secret) e responde `404 {"error":"Not Found"}` **somente** quando o app não
+existe. Um app válido responde com `device_code` (ou `device_flow_disabled`).
+A API `GET /applications/{client_id}` não serve para isso: ela retorna 404
+também quando o secret está errado, gerando falso positivo.
+
+### Como corrigir
+
+1. **GitHub → Settings → Developer settings → OAuth Apps** (se o app for de uma
+   organização: **Organization settings → Developer settings**). Se o app não
+   estiver na lista, clique em **New OAuth App**.
 2. *Authorization callback URL*:
    `https://sinutrebackend-production.up.railway.app/auth/github/callback`
-   (precisa ser exatamente igual a `GITHUB_CALLBACK_URL`).
-3. Copie **Client ID** e **Client secret** (o secret só aparece uma vez; use
-   *Generate a new client secret* se tiver perdido).
-4. No **Railway → serviço → Variables**, atualize `GITHUB_CLIENT_ID`,
-   `GITHUB_CLIENT_SECRET` e `GITHUB_CALLBACK_URL` e faça o redeploy
-   (*Deployments → ⋯ → Redeploy*).
-5. Confira no log do boot o client_id mascarado e teste
-   `https://sinutrebackend-production.up.railway.app/auth/github`: o `Location`
-   deve apontar para `github.com/login/oauth/authorize` com o mesmo `client_id`.
+   (idêntico a `GITHUB_CALLBACK_URL`).
+3. Copie o **Client ID** completo — OAuth Apps criados a partir de 2024 têm 22
+   caracteres e começam com `Ov23li`. Um Client ID válido nunca tem 19
+   caracteres.
+4. Copie o **Client secret** (só aparece uma vez; use *Generate a new client
+   secret* se perdeu).
+5. No host (**Railway → serviço → Variables**), atualize `GITHUB_CLIENT_ID`,
+   `GITHUB_CLIENT_SECRET` e `GITHUB_CALLBACK_URL`, depois
+   **Deployments → ⋯ → Redeploy**.
+6. Confirme: `npm run check:github` deve responder `OK: OAuth App existe`, e
+   `GET /auth/github` deve redirecionar para `github.com/login/oauth/authorize`
+   com o novo `client_id`.
 
-Outros sintomas com causa parecida:
+### Outros sintomas de login
 
 | O que aparece | Causa |
 | --- | --- |
-| 404 na página do GitHub | `client_id` inválido (formato errado ou OAuth App apagado) |
+| 404 na página do GitHub | `client_id` não existe (valor truncado ou OAuth App apagado) |
 | `redirect_uri_mismatch` | `GITHUB_CALLBACK_URL` diferente da *Authorization callback URL* do app |
 | Volta para `/login` sem token | `FRONTEND_URL` com domínio que não é o do front (CORS/redirect) |
 | `Falha ao obter access_token do GitHub` | `GITHUB_CLIENT_SECRET` errado |
+| `Origin ... nao permitida` | domínio do front fora da allowlist de CORS |
