@@ -13,6 +13,10 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Conexão direta usada pelas migrações. Necessário em provedores com pooler
+  // (Supabase porta 6543 / PgBouncer), onde "prisma migrate" não funciona.
+  // Se DIRECT_URL não for definida, scripts/start.js usa DATABASE_URL.
+  directUrl = env("DIRECT_URL")
 }
 
 model User {

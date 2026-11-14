@@ -35,7 +35,8 @@ npx prisma migrate dev --name nome-da-migracao
 
 | Variável | Descrição |
 | --- | --- |
-| `DATABASE_URL` | String de conexão do PostgreSQL |
+| `DATABASE_URL` | String de conexão do PostgreSQL (no Supabase, o *transaction pooler* na porta 6543) |
+| `DIRECT_URL` | Conexão direta usada pelas migrações (opcional; padrão = `DATABASE_URL`) |
 | `PORT` | Porta HTTP (padrão `3333`) |
 | `TZ` | Fuso usado nas métricas (ex.: `America/Sao_Paulo`) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Credenciais do OAuth App |
@@ -135,14 +136,32 @@ existir antes. Há duas formas de obtê-lo.
 O Railway injeta a connection string interna (`*.railway.internal`) e o
 `migrate deploy` cria o schema no primeiro boot.
 
-### Opção B — Supabase ou Neon (banco já criado por você)
+### Opção B — Supabase (banco já criado no painel)
 
-O banco é provisionado automaticamente ao criar o projeto no painel do provedor:
+1. Crie um projeto em [supabase.com](https://supabase.com).
+2. Em **Project Settings → Database → Connection string**, copie **duas** URLs:
 
-1. Crie um projeto em [neon.tech](https://neon.tech) ou [supabase.com](https://supabase.com).
-2. Copie a connection string (`postgresql://...`).
-3. Cole em `DATABASE_URL` nas Variables do backend.
-4. Se o provedor exigir SSL, mantenha `?sslmode=require` no final.
+   | Variável | Qual pegar | Porta |
+   | --- | --- | --- |
+   | `DATABASE_URL` | **Transaction pooler** + `?pgbouncer=true&connection_limit=1` | 6543 |
+   | `DIRECT_URL` | **Session pooler** (ou *Direct connection*, se habilitado) | 5432 |
+
+3. Substitua `[YOUR-PASSWORD]` pela senha do banco nas duas.
+
+> **Por que duas URLs?** A porta 6543 usa PgBouncer em modo *transaction*, que
+> não aceita os comandos de DDL das migrações. O `prisma migrate deploy` usa
+> `DIRECT_URL` (porta 5432) e a aplicação em execução usa `DATABASE_URL`
+> (pooler), que aguenta mais conexões.
+>
+> Se você informar só `DATABASE_URL`, o `scripts/start.js` usa ela também para
+> migrar — funciona em Railway/Neon, mas **não** no pooler do Supabase.
+
+Exemplo:
+
+```
+DATABASE_URL=postgresql://postgres.abcdefgh:SENHA@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+DIRECT_URL=postgresql://postgres.abcdefgh:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+```
 
 Vantagem: não é preciso criar serviço de banco no Railway. Funciona igual.
 
@@ -162,7 +181,8 @@ O repositório já inclui `railway.json` (build, start e health check em `/healt
 
    | Variável | Valor |
    | --- | --- |
-   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (referência) ou a string do provedor |
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (referência) ou a URL do Supabase |
+   | `DIRECT_URL` | Só no Supabase: a URL da porta 5432 |
    | `JWT_SECRET` | string longa e aleatória |
    | `GITHUB_CLIENT_ID` | do OAuth App |
    | `GITHUB_CLIENT_SECRET` | do OAuth App |
