@@ -7,19 +7,25 @@ import { foodRouter } from './routes/food.routes';
 import { profileRouter } from './routes/profile.routes';
 import { metricsRouter } from './routes/metrics.routes';
 import { errorHandler, notFound } from './middlewares/error.middleware';
+import { HttpError } from './lib/http';
 
 export const app = express();
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Requisições sem Origin (curl, health check) são permitidas.
-      if (!origin || env.frontendUrls.includes(origin)) {
-        return callback(null, true);
+      // Requisições sem Origin (curl, health check, server-to-server) passam.
+      if (!origin || env.isAllowedOrigin(origin)) {
+        return callback(null, origin ?? true);
       }
 
-      console.warn(`[CORS] Origem bloqueada: ${origin}`);
-      return callback(null, false);
+      // Negar aqui faria o middleware chamar next(), e o preflight cairia no
+      // notFound (404). Respondemos com 403 explicito para o navegador.
+      console.warn(
+        `[CORS] Origem bloqueada: ${origin}. ` +
+          `Permitidas: ${env.frontendUrls.join(', ') || '(nenhuma)'}`,
+      );
+      return callback(new HttpError(403, `Origem nao permitida: ${origin}`));
     },
     credentials: true,
   }),
