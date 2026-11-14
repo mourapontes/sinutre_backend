@@ -37,22 +37,73 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Diagnostico do banco a partir do container publicado. Retorna apenas o codigo
-// do erro do Prisma (ex.: P1001 = servidor inalcancavel), nunca host ou senha.
+/**
+ * Classifica a falha do Prisma em uma categoria segura (sem host nem senha).
+ * A mensagem crua fica só no log do container.
+ */
+function classifyDbError(error: unknown): string {
+  const code = (error as { errorCode?: string }).errorCode;
+  const message = String(
+    (error as Error)?.message ?? (error as unknown) ?? '',
+  ).toLowerCase();
+
+  if (code === 'P1000' || message.includes('authentication failed')) {
+    return 'authentication-failed';
+  }
+
+  if (message.includes('enotfound') || message.includes('getaddrinfo')) {
+    return 'dns-not-found';
+  }
+
+  if (
+    message.includes("can't reach database server") ||
+    message.includes('econnrefused') ||
+    message.includes('etimedout') ||
+    message.includes('timed out')
+  ) {
+    return 'unreachable';
+  }
+
+  if (
+    message.includes('certificate') ||
+    message.includes('tls') ||
+    message.includes('ssl')
+  ) {
+    return 'tls';
+  }
+
+  if (message.includes('too many connections') || message.includes('pool')) {
+    return 'pool-exhausted';
+  }
+
+  if (code === 'P2021' || message.includes('does not exist')) {
+    return 'schema-missing';
+  }
+
+  if (code === 'P1003' || message.includes('does not exist in the database')) {
+    return 'database-missing';
+  }
+
+  return 'unknown';
+}
+
+// Diagnostico do banco a partir do container publicado. Retorna a categoria da
+// falha (ex.: unreachable, dns-not-found), nunca host ou senha.
 app.get('/health/db', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
 
     return res.json({ status: 'ok' });
   } catch (error) {
-    const code =
-      (error as { errorCode?: string }).errorCode ??
-      (error as Error).name ??
-      'desconhecido';
+    const reason = classifyDbError(error);
+    const code = (error as { errorCode?: string }).errorCode ?? null;
 
-    console.error('[SiNutre] Healthcheck do banco falhou:', error);
+    console.error(
+      `[SiNutre] Healthcheck do banco falhou (${reason}):`,
+      error,
+    );
 
-    return res.status(503).json({ status: 'error', code });
+    return res.status(503).json({ status: 'error', reason, code });
   }
 });
 
