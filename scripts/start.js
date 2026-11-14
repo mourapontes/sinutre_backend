@@ -14,10 +14,23 @@ require('dotenv/config');
 require('./check-env');
 
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
-// Supabase/Neon com pooler exigem conexão direta para migrar; se o usuário não
-// informou DIRECT_URL, usamos DATABASE_URL.
+const root = path.join(__dirname, '..');
+
+/** Mostra apenas host:porta, sem usuário/senha. */
+function describeTarget(url) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname}`;
+  } catch {
+    return '(URL invalida)';
+  }
+}
+
+// Supabase/Neon atras do pooler exigem conexao direta para migrar; se o usuario
+// nao informou DIRECT_URL, usamos DATABASE_URL.
 if (!process.env.DIRECT_URL || process.env.DIRECT_URL.trim() === '') {
   process.env.DIRECT_URL = process.env.DATABASE_URL;
 }
@@ -29,22 +42,41 @@ if (process.env.DATABASE_URL.includes('pooler.supabase.com:6543')) {
   );
 }
 
-const prismaBin = path.join(
-  __dirname,
-  '..',
-  'node_modules',
-  'prisma',
-  'build',
-  'index.js',
-);
+console.log('[SiNutre] Migrações em:', describeTarget(process.env.DIRECT_URL));
+
+// O build precisa ter gerado dist/. Sem isso o require abaixo falha com
+// MODULE_NOT_FOUND e o container reinicia em loop (502 no proxy).
+const entry = path.join(root, 'dist', 'index.js');
+
+if (!fs.existsSync(entry)) {
+  console.error(
+    '\n[SiNutre] dist/index.js nao existe. O build nao rodou ou falhou.\n' +
+      '      Rode "npm run build" antes de "npm start"\n' +
+      '      (o railway.json ja executa o build no deploy).\n',
+  );
+  process.exit(1);
+}
+
+const prismaBin = path.join(root, 'node_modules', 'prisma', 'build', 'index.js');
 
 console.log('[SiNutre] Aplicando migrações...');
 
-const migrate = spawnSync(
-  process.execPath,
-  [prismaBin, 'migrate', 'deploy'],
-  { stdio: 'inherit', env: process.env },
-);
+const migrate = spawnSync(process.execPath, [prismaBin, 'migrate', 'deploy'], {
+  stdio: 'inherit',
+  env: process.env,
+  // Falha rapido quando o banco nao responde: com o healthcheck do Railway em
+  // 100s, um migrate pendurado derrubaria o deploy antes de qualquer log util.
+  timeout: 90_000,
+});
+
+if (migrate.error && migrate.error.code === 'ETIMEDOUT') {
+  console.error(
+    '\n[SiNutre] A migração excedeu 90s. O banco não respondeu.\n' +
+      '      Verifique se o host aceita conexão de fora (o Supabase\n' +
+      '      "Direct connection" e IPv6-only e nao funciona no Railway).\n',
+  );
+  process.exit(1);
+}
 
 if (migrate.status !== 0) {
   console.error(
@@ -54,4 +86,4 @@ if (migrate.status !== 0) {
   process.exit(migrate.status ?? 1);
 }
 
-require(path.join(__dirname, '..', 'dist', 'index.js'));
+require(entry);
