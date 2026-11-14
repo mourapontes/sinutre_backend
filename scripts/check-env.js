@@ -3,28 +3,74 @@
  * Valida as variáveis de ambiente obrigatórias antes do Prisma/servidor.
  *
  * Sem isso o container falha uma variável por vez (o Prisma para na primeira),
- * gerando vários ciclos de restart. Aqui listamos todas de uma vez.
+ * gerando vários ciclos de restart. Aqui listamos todas de uma vez, com o
+ * contexto do container (serviço/ambiente) para facilitar o diagnóstico.
  */
 require('dotenv/config');
 
 const required = [
-  { name: 'DATABASE_URL', hint: 'Railway: crie um PostgreSQL e use ${{Postgres.DATABASE_URL}} (ou a string do Supabase/Neon)' },
+  { name: 'DATABASE_URL', hint: 'Supabase: aba "Transaction pooler" (porta 6543) com ?pgbouncer=true' },
+  { name: 'DIRECT_URL', hint: 'Supabase: aba "Session pooler" (porta 5432). No Railway/Neon pode ficar vazio', optional: true },
   { name: 'JWT_SECRET', hint: 'uma string longa e aleatoria' },
   { name: 'GITHUB_CLIENT_ID', hint: 'do GitHub OAuth App' },
   { name: 'GITHUB_CLIENT_SECRET', hint: 'do GitHub OAuth App' },
   { name: 'GITHUB_CALLBACK_URL', hint: 'https://<dominio-do-backend>/auth/github/callback' },
 ];
 
-const missing = required.filter(({ name }) => {
+const isBlank = (name) => {
   const value = process.env[name];
   return !value || value.trim() === '';
-});
+};
+
+const missing = required.filter(({ name, optional }) => !optional && isBlank(name));
 
 // Referencia nao resolvida no Railway, ex.: "${{Postgres.DATABASE_URL}}".
 const unresolved = required.filter(({ name }) => {
   const value = process.env[name];
   return typeof value === 'string' && value.includes('${{');
 });
+
+// Diagnostico: mostra em QUAL servico/ambiente o container esta rodando.
+const CONTEXT_KEYS = [
+  'RAILWAY_SERVICE_NAME',
+  'RAILWAY_ENVIRONMENT_NAME',
+  'RAILWAY_PROJECT_NAME',
+  'RAILWAY_GIT_REPO_NAME',
+  'RAILWAY_GIT_BRANCH',
+];
+
+function describeContext() {
+  const info = CONTEXT_KEYS.map((key) => [key, process.env[key]]).filter(
+    ([, value]) => value,
+  );
+
+  if (info.length === 0) {
+    return null;
+  }
+
+  return info.map(([key, value]) => `      ${key}: ${value}`).join('\n');
+}
+
+// Variaveis de sistema que nao ajudam no diagnostico.
+const SYSTEM_VARS = /^(PATH|HOME|PWD|SHLVL|_|HOSTNAME|LANG|LC_.*|TERM|SHELL|USER|LOGNAME|TMPDIR|TEMP|TMP|npm_.*|NODE_.*|YARN_.*|NIXPACKS_.*|RAILWAY_ENVIRONMENT|RAILWAY_PROJECT_ID|HOST|HOSTNAME)$/;
+
+function describeAvailable() {
+  const names = Object.keys(process.env)
+    .filter((key) => /^[A-Z][A-Z0-9_]*$/.test(key))
+    .filter((key) => !SYSTEM_VARS.test(key))
+    .sort();
+
+  if (names.length === 0) {
+    return '(nenhuma variavel de aplicacao encontrada)';
+  }
+
+  // Em producao (Linux) a lista e curta. O corte evita poluir o log.
+  const LIMIT = 20;
+  const shown = names.slice(0, LIMIT);
+  const extra = names.length - shown.length;
+
+  return shown.join(', ') + (extra > 0 ? ` (+${extra} outras)` : '');
+}
 
 if (missing.length > 0) {
   console.error('\n[SiNutre] Variaveis de ambiente obrigatorias ausentes:\n');
@@ -33,9 +79,25 @@ if (missing.length > 0) {
     console.error(`  - ${name}\n      ${hint}`);
   }
 
-  console.error(
-    '\nConfigure em Railway > seu servico > Variables e faca o redeploy.\n',
-  );
+  const context = describeContext();
+
+  if (context) {
+    console.error('\n[SiNutre] Container rodando em:\n' + context);
+    console.error(
+      '\n      As variaveis precisam estar no servico acima (aba Variables)\n' +
+        '      e no MESMO ambiente (environment) mostrado aqui.\n',
+    );
+  }
+
+  console.error('[SiNutre] Variaveis recebidas (apenas nomes):');
+  console.error('      ' + describeAvailable() + '\n');
+
+  if (isBlank('DATABASE_URL') && !isBlank('SUPABASE_URL')) {
+    console.error(
+      '[SiNutre] Dica: SUPABASE_URL/SUPABASE_KEY nao sao usados por este backend.\n' +
+        '      E preciso a connection string do PostgreSQL (postgresql://...pooler.supabase.com).\n',
+    );
+  }
 
   process.exit(1);
 }
@@ -47,8 +109,9 @@ if (unresolved.length > 0) {
       '\n',
   );
   console.error(
-    'O nome do servico na referencia precisa ser identico ao nome real.\n' +
-      'Ex.: se o banco se chama "Postgres", use ${{Postgres.DATABASE_URL}}.\n',
+    'O servico citado na referencia precisa existir no projeto.\n' +
+      'Se voce usa Supabase, NAO use ${{Postgres.DATABASE_URL}}:\n' +
+      'cole a connection string completa.\n',
   );
 
   process.exit(1);
@@ -62,3 +125,8 @@ if (!process.env.FRONTEND_URL) {
 }
 
 console.log('[SiNutre] Variaveis de ambiente validadas.');
+
+const context = describeContext();
+if (context) {
+  console.log('[SiNutre] Container:\n' + context);
+}

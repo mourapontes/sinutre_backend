@@ -181,9 +181,15 @@ O repositório já inclui `railway.json` (build, start e health check em `/healt
 
    | Variável | Valor |
    | --- | --- |
-   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (referência) ou a URL do Supabase |
-   | `DIRECT_URL` | Só no Supabase: a URL da porta 5432 |
+   | `DATABASE_URL` | **Com Supabase:** cole a URL do *transaction pooler* (porta 6543). **Com Railway/Neon:** `${{Postgres.DATABASE_URL}}` ou a URL do provedor |
+   | `DIRECT_URL` | Só no Supabase: a URL do *session pooler* (porta 5432) |
    | `JWT_SECRET` | string longa e aleatória |
+
+   > ⚠️ **Usando Supabase? Não use `${{Postgres.DATABASE_URL}}`.** Essa sintaxe
+   > é uma referência a um serviço PostgreSQL do próprio Railway. Se não existir
+   > um serviço com esse nome exato no projeto, o Railway não salva a variável
+   > (e as outras do mesmo bloco também não são aplicadas). Cole a string do
+   > Supabase diretamente.
    | `GITHUB_CLIENT_ID` | do OAuth App |
    | `GITHUB_CLIENT_SECRET` | do OAuth App |
    | `GITHUB_CALLBACK_URL` | `https://<seu-servico>.up.railway.app/auth/github/callback` |
@@ -202,9 +208,21 @@ O start roda `prisma migrate deploy` antes de subir o servidor, então as tabela
 são criadas automaticamente no primeiro deploy.
 
 Antes do Prisma, o `npm start` executa `scripts/check-env.js`, que lista **todas**
-as variáveis ausentes de uma vez (em vez de falhar uma por vez) e detecta
-referências não resolvidas como `${{Postgres.DATABASE_URL}}`. Para rodar só a
-checagem:
+as variáveis ausentes de uma vez (em vez de falhar uma por vez), detecta
+referências não resolvidas como `${{Postgres.DATABASE_URL}}` e informa em qual
+**serviço/ambiente** o container está rodando:
+
+```
+[SiNutre] Variaveis de ambiente obrigatorias ausentes:
+  - DATABASE_URL
+  ...
+[SiNutre] Container rodando em:
+      RAILWAY_SERVICE_NAME: sinutre_backend
+      RAILWAY_ENVIRONMENT_NAME: production
+```
+
+Se `RAILWAY_SERVICE_NAME` não for o serviço onde você cadastrou as variáveis, é
+sinal de que elas estão no lugar errado. Para rodar só a checagem:
 
 ```bash
 npm run check:env
