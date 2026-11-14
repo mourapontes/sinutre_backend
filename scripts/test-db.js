@@ -17,11 +17,44 @@ const mask = (url) => {
   return url.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:****@');
 };
 
+const PLACEHOLDERS = [
+  'PROJECT_REF',
+  'REGIAO',
+  'SENHA',
+  'SUA_SENHA',
+  '[YOUR-PASSWORD]',
+  'YOUR-PASSWORD',
+  'SEU_',
+  'TROCAR',
+  'COLE_',
+  'COLE_AQUI',
+  'USER:PASSWORD',
+  'HOST:5432',
+  'usuario:senha',
+];
+
+function findPlaceholders(url) {
+  return PLACEHOLDERS.filter((token) =>
+    url.toLowerCase().includes(token.toLowerCase()),
+  );
+}
+
 function analyze(url, label) {
   const problems = [];
 
   if (!url) {
     problems.push(`${label} nao definida.`);
+    return problems;
+  }
+
+  const placeholders = findPlaceholders(url);
+
+  if (placeholders.length > 0) {
+    problems.push(
+      `${label} ainda tem placeholder(s) do .env.example: ` +
+        placeholders.join(', ') +
+        '. Substitua pelos valores reais do painel do Supabase.',
+    );
     return problems;
   }
 
@@ -36,10 +69,6 @@ function analyze(url, label) {
     // ok
   } else {
     problems.push(`${label} nao comeca com postgresql:// ou postgres://.`);
-  }
-
-  if (url.includes('[YOUR-PASSWORD]') || url.includes('[SENHA]')) {
-    problems.push(`${label} ainda tem o placeholder da senha.`);
   }
 
   if (/db\.[a-z0-9]+\.supabase\.co/i.test(url)) {
@@ -86,6 +115,27 @@ function analyze(url, label) {
     console.error('\n=== Problemas no formato ===');
     for (const problem of problems) {
       console.error('  - ' + problem);
+    }
+
+    const hasPlaceholders = [databaseUrl, directUrl].some(
+      (url) => url && findPlaceholders(url).length > 0,
+    );
+
+    if (hasPlaceholders) {
+      console.error('\n=== Onde pegar os valores reais ===');
+      console.error(
+        '  Supabase > Project Settings > Database > Connection string\n' +
+          '  (ou o botao "Connect" no topo do dashboard do projeto)\n',
+      );
+      console.error('  DATABASE_URL  -> aba Transaction pooler (porta 6543)');
+      console.error('  DIRECT_URL    -> aba Session pooler (porta 5432)');
+      console.error(
+        '\n  O host real tem o formato aws-0-<regiao>.pooler.supabase.com' +
+          '\n  (ex.: aws-0-us-east-1), e o usuario e postgres.<project-ref>.',
+      );
+      console.error(
+        '\n  Copie a string do painel em vez de digitar o modelo do .env.example.\n',
+      );
     }
   }
 
