@@ -115,6 +115,40 @@ Limites aplicados:
 | `eatTime` | obrigatório, data válida |
 | `items` | ao menos um alimento, sem repetição, `grams` entre 1 e 5000 |
 
+## Banco de dados
+
+### As tabelas são criadas automaticamente
+
+Sim. `npm start` executa `prisma migrate deploy` antes de subir o servidor, que
+aplica todas as migrações versionadas em `prisma/migrations/`. Você **nunca**
+precisa rodar SQL manualmente — num banco vazio ele cria todas as tabelas.
+
+O que **não** é criado automaticamente é o *servidor* de PostgreSQL: ele precisa
+existir antes. Há duas formas de obtê-lo.
+
+### Opção A — PostgreSQL do Railway (1 clique)
+
+1. No projeto: **+ Create** → **Database** → **Add PostgreSQL**.
+2. No serviço do backend, aba **Variables** → **+ New Variable** →
+   **Add Reference** → escolha o serviço do Postgres → `DATABASE_URL`.
+
+O Railway injeta a connection string interna (`*.railway.internal`) e o
+`migrate deploy` cria o schema no primeiro boot.
+
+### Opção B — Supabase ou Neon (banco já criado por você)
+
+O banco é provisionado automaticamente ao criar o projeto no painel do provedor:
+
+1. Crie um projeto em [neon.tech](https://neon.tech) ou [supabase.com](https://supabase.com).
+2. Copie a connection string (`postgresql://...`).
+3. Cole em `DATABASE_URL` nas Variables do backend.
+4. Se o provedor exigir SSL, mantenha `?sslmode=require` no final.
+
+Vantagem: não é preciso criar serviço de banco no Railway. Funciona igual.
+
+> Em ambos os casos o schema é criado pelo próprio deploy. O que difere é apenas
+> quem provisiona o servidor PostgreSQL.
+
 ## Deploy no Railway
 
 O repositório já inclui `railway.json` (build, start e health check em `/health`).
