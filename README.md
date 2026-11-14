@@ -19,6 +19,7 @@ Stack: **TypeScript + Express + Prisma + PostgreSQL**.
 ```bash
 npm install
 cp .env.example .env          # preencha DATABASE_URL, JWT_SECRET e o OAuth do GitHub
+npm run check:env             # valida se todas as variáveis obrigatórias existem
 npx prisma migrate dev        # cria as tabelas no banco
 npm run dev
 ```
@@ -145,6 +146,15 @@ O repositório já inclui `railway.json` (build, start e health check em `/healt
 
 O start roda `prisma migrate deploy` antes de subir o servidor, então as tabelas
 são criadas automaticamente no primeiro deploy.
+
+Antes do Prisma, o `npm start` executa `scripts/check-env.js`, que lista **todas**
+as variáveis ausentes de uma vez (em vez de falhar uma por vez) e detecta
+referências não resolvidas como `${{Postgres.DATABASE_URL}}`. Para rodar só a
+checagem:
+
+```bash
+npm run check:env
+```
 
 ### Múltiplos domínios no CORS
 
