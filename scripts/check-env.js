@@ -124,6 +124,50 @@ if (!process.env.FRONTEND_URL) {
   );
 }
 
+/**
+ * FRONTEND_URL costuma ser preenchida colando um bloco com varias linhas no
+ * painel, o que salva `https://site\nTZ=America/Sao_Paulo` como um unico valor.
+ * O servidor ignora entradas invalidas, mas o aviso aqui evita descobrir isso
+ * no meio do login.
+ */
+function checkFrontendUrl() {
+  const raw = process.env.FRONTEND_URL ?? '';
+
+  if (!raw.trim()) {
+    return;
+  }
+
+  const entries = raw
+    .split(/[\s,;]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const invalid = entries.filter((entry) => {
+    try {
+      const url = new URL(entry);
+      return url.protocol !== 'http:' && url.protocol !== 'https:';
+    } catch {
+      return true;
+    }
+  });
+
+  if (invalid.length > 0) {
+    console.warn(
+      `\n[SiNutre] FRONTEND_URL tem ${invalid.length} entrada(s) que nao sao URL: ` +
+        `${invalid.join(', ')}\n` +
+        '      Provavelmente o campo recebeu um bloco multi-linha (ex.: colar\n' +
+        '      "FRONTEND_URL=...\nTZ=America/Sao_Paulo" juntos). Deixe apenas as\n' +
+        '      URLs, separadas por virgula, e ponha TZ em uma variavel propria.\n' +
+        '      O servidor ignora essas entradas, mas o redirect pos-login usa a\n' +
+        '      primeira URL valida.\n',
+    );
+  } else {
+    console.log(`[SiNutre] FRONTEND_URL: ${entries.join(', ')}`);
+  }
+}
+
+checkFrontendUrl();
+
 // Formato do client_id de um OAuth App do GitHub. O tamanho depois do prefixo
 // varia, então só rejeitamos valores claramente incompletos. A checagem
 // definitiva é `npm run check:github` (consulta o GitHub).

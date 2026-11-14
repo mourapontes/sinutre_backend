@@ -335,8 +335,33 @@ também quando o secret está errado, gerando falso positivo.
 | `bad_verification_code` | `code` expirado/usado (a página de callback foi recarregada) |
 | `redirect_uri_mismatch` | `GITHUB_CALLBACK_URL` diferente da *Authorization callback URL* do app |
 | `access_denied` | o usuário cancelou a autorização no GitHub |
-| Volta para `/login` sem token | `FRONTEND_URL` com domínio que não é o do front (CORS/redirect) |
+| Volta para `/login` sem token | `FRONTEND_URL` com valor inválido (ex.: linhas coladas) ou domínio diferente do front |
 | `Origin ... nao permitida` | domínio do front fora da allowlist de CORS |
+
+## O login não retorna logado (FRONTEND_URL com valor inválido)
+
+O redirect final do OAuth é `${FRONTEND_URL}/?token=...`. Se `FRONTEND_URL`
+contiver algo que não é URL, o navegador cai em uma página inexistente e o
+usuário volta ao login — mesmo com o GitHub tendo autorizado.
+
+Isso acontece quando o painel da hospedagem recebe um bloco multi-linha colado
+no campo, salvando o valor como:
+
+```
+https://sinutre-fontend-m7kr.vercel.app
+TZ=America/Sao_Paulo
+```
+
+O servidor agora descarta entradas que não sejam URLs `http(s)` (o aviso
+aparece no boot) e usa a primeira válida. Para conferir o valor efetivo:
+
+```bash
+npm run check:env   # avisa: "FRONTEND_URL tem 1 entrada(s) que nao sao URL: TZ=..."
+```
+
+Corrija separando as variáveis no painel: `FRONTEND_URL` só com a URL do front e
+`TZ` como variável própria. Aceita-se mais de um domínio separado por vírgula
+(produção e previews).
 
 ## Falha ao obter access_token (secret inválido)
 

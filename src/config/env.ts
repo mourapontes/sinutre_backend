@@ -29,12 +29,53 @@ function normalizeOrigin(value: string): string {
   return unwrap(value).replace(/\/+$/, '');
 }
 
-// FRONTEND_URL aceita uma lista separada por vírgula, útil para liberar
-// domínios de produção e de preview da Vercel ao mesmo tempo.
-const configuredFrontendUrls = (process.env.FRONTEND_URL ?? '')
-  .split(',')
-  .map(normalizeOrigin)
-  .filter(Boolean);
+/**
+ * Converte uma entrada em origem válida. Qualquer coisa que não seja uma URL
+ * http(s) é descartada — por exemplo `TZ=America/Sao_Paulo`, que aparece quando
+ * o painel da hospedagem recebe um bloco colado com várias linhas no campo de
+ * FRONTEND_URL. Sem esse filtro o redirect pós-login virava
+ * `https://site%0ATZ=America/Sao_Paulo/login` e o usuário não voltava logado.
+ */
+function toOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null;
+    }
+
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
+}
+
+// FRONTEND_URL aceita vários domínios separados por vírgula (ou espaço/quebra
+// de linha, que é como algumas pessoas colam listas no painel).
+function parseOrigins(raw: string): string[] {
+  const entries = raw
+    .split(/[\s,;]+/)
+    .map(normalizeOrigin)
+    .filter(Boolean);
+
+  const origins: string[] = [];
+
+  for (const entry of entries) {
+    const origin = toOrigin(entry);
+
+    if (origin) {
+      origins.push(origin);
+    } else {
+      console.warn(
+        `[SiNutre] FRONTEND_URL: entrada ignorada (nao e uma URL): ${entry}`,
+      );
+    }
+  }
+
+  return origins;
+}
+
+const configuredFrontendUrls = parseOrigins(process.env.FRONTEND_URL ?? '');
 
 // Railway define NODE_ENV=production; o fallback de redirect abaixo também vale
 // quando só as variáveis do Railway estão presentes.
