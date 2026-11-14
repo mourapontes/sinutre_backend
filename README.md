@@ -261,3 +261,10 @@ FRONTEND_URL=https://sinutre-fontend-m7kr.vercel.app,https://sinutre-fontend-git
 ```
 
 O primeiro domínio da lista é usado no redirect após o login.
+
+Os domínios publicados do front (`sinutre-fontend.vercel.app` e
+`sinutre-fontend-*.vercel.app`, que cobre produção e previews) já vêm liberados
+em `src/config/env.ts`. Sem isso a API respondia **403** para o site em produção
+quando `FRONTEND_URL` estava ausente ou apontando para outro domínio. Em ambiente
+publicado, se `FRONTEND_URL` só tiver domínios locais (`localhost`), o redirect
+após o login usa `https://sinutre-fontend-m7kr.vercel.app`.
